@@ -4,6 +4,26 @@ class Converter {
     this.supportedLangs = ['javascript', 'javascriptreact'];
   }
 
+  getComponentName(source) {
+    const dict = ['const', 'export', 'function', 'default'];
+    const lineArr = source.split('\r', 1)[0].split(' ');
+    let componentName = '';
+    for (let word of lineArr) {
+      if (dict.indexOf(word) !== -1) {
+        continue;
+      } else {
+        word.indexOf('(') !== -1 ? componentName = word.split('(')[0] : componentName = word;
+        break;
+      }
+    }
+
+    // const endIndex = source.indexOf('(');
+    // const startIndex = source.lastIndexOf(' ', endIndex);
+    // const componentName = source.substring(startIndex+1, endIndex);
+
+    return componentName;
+  }
+
   convert(source) {
     let templateStrings = {
       'componentName': 'placeholder',
@@ -11,24 +31,26 @@ class Converter {
       'renderReturn': 'placeholder'
     };
 
-    const template = `
-    class ${templateStrings.componentName} extends React.Component {
-      constructor(props) {
-        super(props);
-      }
+    templateStrings.componentName = this.getComponentName(source);
 
-      ${templateStrings.notRender}
-    
-      render() {
-        const {
-          props,
-        } = this;
-    
-        return (
-          ${templateStrings.renderReturn}
-        );
-      }
-    }
+    const template = `
+class ${templateStrings.componentName} extends React.Component {
+  constructor(props) {
+    super(props);
+  }
+
+  ${templateStrings.notRender}
+
+  render() {
+    const {
+      props,
+    } = this;
+
+    return (
+      ${templateStrings.renderReturn}
+    );
+  }
+}
     `;
 
     return template;
