@@ -8,6 +8,7 @@ class Converter {
     const dict = ['const', 'export', 'function', 'default'];
     const lineArr = source.split('\r', 1)[0].split(' ');
     let componentName = '';
+
     for (let word of lineArr) {
       if (dict.indexOf(word) !== -1) {
         continue;
@@ -17,11 +18,33 @@ class Converter {
       }
     }
 
-    // const endIndex = source.indexOf('(');
-    // const startIndex = source.lastIndexOf(' ', endIndex);
-    // const componentName = source.substring(startIndex+1, endIndex);
-
     return componentName;
+  }
+
+  getRender(source) {
+    const lineArr = source.split('\r');
+    let returnRender = '';
+    // const startIndex = source.indexOf('(',  source.indexOf('(') + 1) + 1;
+    // const endIndex = source.lastIndexOf(')');
+    // const returnRender = source.substring(startIndex, endIndex);
+    for (let i = lineArr.length - 1; i >= 0; i--) {
+      const returnIndex = lineArr[i].indexOf('return');
+      if (returnIndex !== -1) {
+        returnRender = lineArr[i].substring(returnIndex) + returnRender;
+        if (returnRender.indexOf('(') !== -1) {
+          returnRender = returnRender.substring(returnRender.indexOf('(') + 1, returnRender.lastIndexOf(')'));
+        } else {
+          returnRender = lineArr[i].substring(lineArr[i].indexOf('return') + 6, lineArr[i].indexOf(';') !== -1 ? lineArr[i].indexOf(';') : null);
+        }      
+        break;
+      } else if (i === 0) {
+        returnRender = lineArr[i].substring(lineArr[i].indexOf('=>') + 2) + returnRender;
+        returnRender = returnRender.substring(returnRender.indexOf('(') + 1 || 6, returnRender.lastIndexOf(')'));
+        break;
+      } 
+      returnRender = lineArr[i] + returnRender;
+    }
+    return returnRender;
   }
 
   convert(source) {
@@ -32,6 +55,7 @@ class Converter {
     };
 
     templateStrings.componentName = this.getComponentName(source);
+    templateStrings.renderReturn = this.getRender(source);
 
     const template = `
 class ${templateStrings.componentName} extends React.Component {
@@ -46,12 +70,9 @@ class ${templateStrings.componentName} extends React.Component {
       props,
     } = this;
 
-    return (
-      ${templateStrings.renderReturn}
-    );
+    return (${templateStrings.renderReturn});
   }
-}
-    `;
+}`;
 
     return template;
   }
