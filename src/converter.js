@@ -1,23 +1,29 @@
+const {parse} = require('@babel/parser');
+const traverse = require('@babel/traverse');
+const generate = require('@babel/generator');
+const t = require('babel-types');
+
 class Converter {
   constructor (window) {
     this.window = window;
     this.supportedLangs = ['javascript', 'javascriptreact'];
   }
 
-  getComponentName(source) {
-    const dict = ['const', 'export', 'function', 'default'];
-    const lineArr = source.split('\r', 1)[0].split(' ');
+  getComponentName(codeAST) {
     let componentName = '';
 
-    for (let word of lineArr) {
-      if (dict.indexOf(word) !== -1) {
-        continue;
-      } else {
-        word.indexOf('(') !== -1 ? componentName = word.split('(')[0] : componentName = word;
-        break;
+    traverse.default(codeAST, {
+      FunctionDeclaration(path) {
+        componentName = path.node.id.name;
+        return;
+      },
+      
+      ArrowFunctionExpression(path) {
+        componentName = path.parent.id.name;
+        return;
       }
-    }
-
+    });
+    
     return componentName;
   }
 
@@ -54,27 +60,38 @@ class Converter {
       'renderReturn': 'placeholder'
     };
 
-    templateStrings.componentName = this.getComponentName(source);
-    templateStrings.renderReturn = this.getRender(source);
+    let codeAST = parse(source, {
+      plugins: [
+        "jsx"
+      ]
+    });
+    
 
-    const template = `
-class ${templateStrings.componentName} extends React.Component {
-  constructor(props) {
-    super(props);
-  }
+    templateStrings.componentName = this.getComponentName(codeAST);
+    
+    let classAST = t.classDeclaration(
+      t.identifier(templateStrings.componentName),
+      t.memberExpression(t.identifier('React'), t.identifier('Component')),
+      t.classBody(
+        [t.classMethod(
+          'constructor',
+          t.identifier('constructor'),
+          [t.identifier('props')],
+          t.blockStatement(
+            [t.expressionStatement(
+              t.callExpression(
+                t.identifier('super'),
+                [t.identifier('props')]
+              )
+            )]
+        ))]
+      ),
+      []
+    );
+    
+    let output = generate.default(classAST, {}, source);
 
-  ${templateStrings.notRender}
-
-  render() {
-    const {
-      props,
-    } = this;
-
-    return (${templateStrings.renderReturn});
-  }
-}`;
-
-    return template;
+    return output.code;
   }
 
   execute() {
