@@ -9,56 +9,64 @@ class Converter {
     this.supportedLangs = ['javascript', 'javascriptreact'];
   }
 
-  getComponentName(codeAST) {
-    let componentName = '';
+  getComponentNameNode(codeAST) {
+    let componentNameNode;
 
     traverse.default(codeAST, {
       FunctionDeclaration(path) {
-        componentName = path.node.id.name;
-        return;
+        componentNameNode = t.identifier(path.node.id.name);
+        path.stop();
       },
       
       ArrowFunctionExpression(path) {
-        componentName = path.parent.id.name;
-        return;
+        componentNameNode = t.identifier(path.parent.id.name);
+        path.stop();
       }
     });
     
-    return componentName;
+    return componentNameNode;
   }
 
-  getRender(source) {
-    const lineArr = source.split('\r');
-    let returnRender = '';
-    // const startIndex = source.indexOf('(',  source.indexOf('(') + 1) + 1;
-    // const endIndex = source.lastIndexOf(')');
-    // const returnRender = source.substring(startIndex, endIndex);
-    for (let i = lineArr.length - 1; i >= 0; i--) {
-      const returnIndex = lineArr[i].indexOf('return');
-      if (returnIndex !== -1) {
-        returnRender = lineArr[i].substring(returnIndex) + returnRender;
-        if (returnRender.indexOf('(') !== -1) {
-          returnRender = returnRender.substring(returnRender.indexOf('(') + 1, returnRender.lastIndexOf(')'));
-        } else {
-          returnRender = lineArr[i].substring(lineArr[i].indexOf('return') + 6, lineArr[i].indexOf(';') !== -1 ? lineArr[i].indexOf(';') : null);
-        }      
-        break;
-      } else if (i === 0) {
-        returnRender = lineArr[i].substring(lineArr[i].indexOf('=>') + 2) + returnRender;
-        returnRender = returnRender.substring(returnRender.indexOf('(') + 1 || 6, returnRender.lastIndexOf(')'));
-        break;
-      } 
-      returnRender = lineArr[i] + returnRender;
-    }
-    return returnRender;
+  getRenderMethodNode(codeAST) {
+    let returnNodeOfRenderMethod;
+    
+    traverse.default(codeAST, {
+      FunctionDeclaration(path) {
+        let tempArr = path.get('body').get('body');
+        returnNodeOfRenderMethod = tempArr[tempArr.length - 1].node;
+        path.stop();
+      },
+      
+      ArrowFunctionExpression(path) {
+        let tempArr = path.get('body').get('body');
+        returnNodeOfRenderMethod = tempArr[tempArr.length - 1].node;
+        path.stop();
+      }
+    });
+
+    let renderMethodNode = t.classMethod(
+      'method',
+      t.identifier('render'),
+      [],
+      t.blockStatement([
+        t.variableDeclaration(
+        'const',
+        [t.variableDeclarator(
+          t.objectPattern(
+            [t.objectProperty(
+              t.identifier('props'),
+              t.identifier('props'),
+              false, true)]),
+            t.thisExpression())
+        ]),
+        returnNodeOfRenderMethod
+      ])
+    );
+    return renderMethodNode;
   }
 
   convert(source) {
-    let templateStrings = {
-      'componentName': 'placeholder',
-      'notRender': 'placeholder',
-      'renderReturn': 'placeholder'
-    };
+    let templateNodes= {};
 
     let codeAST = parse(source, {
       plugins: [
@@ -67,10 +75,13 @@ class Converter {
     });
     
 
-    templateStrings.componentName = this.getComponentName(codeAST);
+    templateNodes.componentNameNode = this.getComponentNameNode(codeAST);
+    templateNodes.renderMethodNode = this.getRenderMethodNode(codeAST);
+
+    this.getRenderMethodNode(codeAST);
     
     let classAST = t.classDeclaration(
-      t.identifier(templateStrings.componentName),
+      templateNodes.componentNameNode,
       t.memberExpression(t.identifier('React'), t.identifier('Component')),
       t.classBody(
         [t.classMethod(
@@ -84,7 +95,8 @@ class Converter {
                 [t.identifier('props')]
               )
             )]
-        ))]
+        )),
+        templateNodes.renderMethodNode]
       ),
       []
     );
