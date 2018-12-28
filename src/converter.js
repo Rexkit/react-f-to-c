@@ -11,33 +11,33 @@ class Converter {
 
   getComponentNameNode(codeAST) {
     let componentNameNode;
+    let componentParams = [];
 
     traverse.default(codeAST, {
       FunctionDeclaration(path) {
         componentNameNode = t.identifier(path.node.id.name);
+        componentParams = path.node.params;
         path.stop();
       },
       
       ArrowFunctionExpression(path) {
         componentNameNode = t.identifier(path.parent.id.name);
+        componentParams = path.node.params;
         path.stop();
       }
     });
     
-    return componentNameNode;
+    return {
+      componentNameNode,
+      componentParams
+    };
   }
 
-  getRenderMethodNode(codeAST) {
+  getRenderMethodNode(codeAST, params) { //TODO
     let returnNodeOfRenderMethod;
     
     traverse.default(codeAST, {
-      FunctionDeclaration(path) {
-        let tempArr = path.get('body').get('body');
-        returnNodeOfRenderMethod = tempArr[tempArr.length - 1].node;
-        path.stop();
-      },
-      
-      ArrowFunctionExpression(path) {
+      Function(path) {
         let tempArr = path.get('body').get('body');
         returnNodeOfRenderMethod = tempArr[tempArr.length - 1].node;
         path.stop();
@@ -65,6 +65,45 @@ class Converter {
     return renderMethodNode;
   }
 
+  getBody(codeAST) {
+    let body = [];
+    let classBody = [];
+
+    traverse.default(codeAST, {
+      Function(path) {
+        let tempArr = path.get('body').get('body');
+        tempArr.forEach((el, i) => {
+          if (i !== tempArr.length - 1) {
+            body.push(el.node);
+          }
+        });
+        path.stop();
+      }
+    });
+
+    body.forEach(el => {
+      if (t.isFunction(el)) {
+        classBody.push(
+          t.classMethod(
+            'method',
+            el.id,
+            el.params,
+            el.body
+          )
+        );
+      } else if (t.isVariableDeclaration(el)) {
+        classBody.push(
+          t.classProperty(
+            el.declarations[0].id,
+            el.declarations[0].init
+          )
+        );
+      }
+    });
+
+    return classBody;
+  }
+
   convert(source) {
     let templateNodes= {};
 
@@ -75,10 +114,9 @@ class Converter {
     });
     
 
-    templateNodes.componentNameNode = this.getComponentNameNode(codeAST);
-    templateNodes.renderMethodNode = this.getRenderMethodNode(codeAST);
-
-    this.getRenderMethodNode(codeAST);
+    templateNodes = this.getComponentNameNode(codeAST);
+    templateNodes.renderMethodNode = this.getRenderMethodNode(codeAST, templateNodes.componentParams);
+    templateNodes.bodyNodes = this.getBody(codeAST);
     
     let classAST = t.classDeclaration(
       templateNodes.componentNameNode,
@@ -96,6 +134,7 @@ class Converter {
               )
             )]
         )),
+        ...templateNodes.bodyNodes,
         templateNodes.renderMethodNode]
       ),
       []
