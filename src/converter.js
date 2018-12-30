@@ -34,15 +34,30 @@ class Converter {
   }
 
   getRenderMethodNode(codeAST, params) { //TODO
-    let returnNodeOfRenderMethod;
+    let returnNodeOfRenderMethod, paramsNode;
     
     traverse.default(codeAST, {
       Function(path) {
-        let tempArr = path.get('body').get('body');
-        returnNodeOfRenderMethod = tempArr[tempArr.length - 1].node;
+        if (t.isJSXElement(path.get('body').node)) {
+          let jsxEl = path.get('body').node;
+          returnNodeOfRenderMethod = t.returnStatement(jsxEl);
+        } else {
+          let tempArr = path.get('body').get('body');
+          returnNodeOfRenderMethod = tempArr[tempArr.length - 1].node;
+        }
         path.stop();
       }
     });
+
+    if (!t.isObjectPattern(params[0])) {
+      paramsNode = t.objectPattern(
+        [t.objectProperty(
+          t.identifier('props'),
+          t.identifier('props'),
+          false, true)]);
+    } else {
+      paramsNode = params[0];
+    }
 
     let renderMethodNode = t.classMethod(
       'method',
@@ -52,12 +67,8 @@ class Converter {
         t.variableDeclaration(
         'const',
         [t.variableDeclarator(
-          t.objectPattern(
-            [t.objectProperty(
-              t.identifier('props'),
-              t.identifier('props'),
-              false, true)]),
-            t.thisExpression())
+          paramsNode,
+          t.thisExpression())
         ]),
         returnNodeOfRenderMethod
       ])
@@ -71,12 +82,14 @@ class Converter {
 
     traverse.default(codeAST, {
       Function(path) {
-        let tempArr = path.get('body').get('body');
-        tempArr.forEach((el, i) => {
-          if (i !== tempArr.length - 1) {
-            body.push(el.node);
-          }
-        });
+        if (!t.isJSXElement(path.get('body').node)) {
+          let tempArr = path.get('body').get('body');
+          tempArr.forEach((el, i) => {
+            if (i !== tempArr.length - 1) {
+              body.push(el.node);
+            }
+          });
+        }
         path.stop();
       }
     });
