@@ -5,7 +5,6 @@ function activate(context) {
   const converter = new Converter(vscode.window);
 
   let disposable = vscode.commands.registerCommand('extension.convertComponent', () => {
-    console.log('Hi');
     converter.execute();
   });
 

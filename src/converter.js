@@ -33,8 +33,23 @@ class Converter {
     };
   }
 
-  getRenderMethodNode(codeAST, params) { //TODO
-    let returnNodeOfRenderMethod, paramsNode;
+  getRenderMethodNode(codeAST, params , propNamesArr) {
+    let returnNodeOfRenderMethod, paramsNode, checkReturn = false;
+
+    traverse.default(codeAST, {
+      ReturnStatement(path) {
+        const idVisitor = {
+          Identifier(path) {
+            let propName = path.get('body').container.name;
+            if (propNamesArr.includes(propName)) {
+              path.get('body').container.name = `this.${propName}`;
+            }
+          },
+        }
+
+        path.traverse(idVisitor , { propNamesArr});
+      }
+    });
     
     traverse.default(codeAST, {
       Function(path) {
@@ -45,6 +60,8 @@ class Converter {
           let tempArr = path.get('body').get('body');
           returnNodeOfRenderMethod = tempArr[tempArr.length - 1].node;
         }
+
+        
         path.stop();
       }
     });
@@ -79,6 +96,7 @@ class Converter {
   getBody(codeAST) {
     let body = [];
     let classBody = [];
+    let propNameArr = [];
 
     traverse.default(codeAST, {
       Function(path) {
@@ -96,6 +114,7 @@ class Converter {
 
     body.forEach(el => {
       if (t.isFunction(el)) {
+        propNameArr.push(el.id.name);
         classBody.push(
           t.classMethod(
             'method',
@@ -105,6 +124,7 @@ class Converter {
           )
         );
       } else if (t.isVariableDeclaration(el)) {
+        propNameArr.push(el.declarations[0].id.name);
         classBody.push(
           t.classProperty(
             el.declarations[0].id,
@@ -114,7 +134,10 @@ class Converter {
       }
     });
 
-    return classBody;
+    return {
+      classBody, 
+      propNameArr
+    };
   }
 
   convert(source) {
@@ -128,8 +151,10 @@ class Converter {
     
 
     templateNodes = this.getComponentNameNode(codeAST);
-    templateNodes.renderMethodNode = this.getRenderMethodNode(codeAST, templateNodes.componentParams);
-    templateNodes.bodyNodes = this.getBody(codeAST);
+    const bodyMethodReturn = this.getBody(codeAST);
+    const classPropNameArr = bodyMethodReturn.propNameArr;
+    templateNodes.bodyNodes = bodyMethodReturn.classBody;
+    templateNodes.renderMethodNode = this.getRenderMethodNode(codeAST, templateNodes.componentParams, classPropNameArr);
     
     let classAST = t.classDeclaration(
       templateNodes.componentNameNode,
@@ -175,7 +200,7 @@ class Converter {
     const selection = editor.selection;
     const text = doc.getText(selection);
 
-    let output = this.convert(text); //TODO
+    let output = this.convert(text);
 
     editor.edit(function(builder) {
         builder.replace(selection, output);
